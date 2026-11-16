@@ -287,6 +287,31 @@ describe('resolveFilterReferences', () => {
     expect(filter.sources).toEqual(['$logs']);
     expect(unresolvedVariables).toEqual(['logs']);
   });
+
+  it('leaves a reference selecting a source its field cannot use as written', () => {
+    const adhoc: AdhocDashboardFilter = {
+      id: 'a',
+      type: 'ADHOC',
+      name: 'Conditions',
+      sourceType: 'sql',
+      sources: ['$logs', '$metrics'],
+      isVariableEnabled: true,
+    };
+    const result = resolveFilterReferences(
+      adhoc,
+      new Map([
+        ['logs', 'log-source'],
+        ['metrics', 'metric-source'],
+      ]),
+      new Map([
+        ['log-source', SourceKind.Log],
+        ['metric-source', SourceKind.Metric],
+      ]),
+    );
+    expect(result.filter.sources).toEqual(['log-source', '$metrics']);
+    expect(result.unresolvedVariables).toEqual(['metrics']);
+    expect(result.incompatibleVariables).toEqual(['metrics']);
+  });
 });
 
 describe('dashboard variable declarations', () => {
@@ -674,6 +699,7 @@ describe('resolveFilterReferences (connections)', () => {
     ).toEqual({
       filter: dataSourceFilter({ connection: 'conn-1' }),
       unresolvedVariables: [],
+      incompatibleVariables: [],
     });
     expect(
       resolveFilterReferences(
