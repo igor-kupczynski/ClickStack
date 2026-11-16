@@ -1026,8 +1026,7 @@ const renderAdhocConditionSql = ({
   // Stringified like broadcast filter selections, so Map/JSON/Dynamic values
   // compare as strings.
   const target = `toString(${key})`;
-  const toLiteral = (v: string) => `'${escapeSqlString(v)}'`;
-  const literal = toLiteral(value);
+  const literal = `'${escapeSqlString(value)}'`;
   switch (operator) {
     case '=':
     case '!=':
@@ -1039,7 +1038,7 @@ const renderAdhocConditionSql = ({
     case '!~':
       return `NOT match(${target}, ${literal})`;
     case 'IN':
-      return `${target} IN (${values.map(toLiteral).join(', ')})`;
+      return `${target} IN (${formatVariableValues({ values }, 'sqlstring')})`;
     case '=|':
       throw unsupportedOperatorError(operator, 'sql');
     default:
