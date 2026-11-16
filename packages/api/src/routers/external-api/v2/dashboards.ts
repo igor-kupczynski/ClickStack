@@ -3740,6 +3740,7 @@ router.put(
         tiles,
         filters,
         existingTiles: existingDashboard.tiles ?? [],
+        existingFilters: existingDashboard.filters ?? [],
         containers: effectiveContainers,
       });
       if (validationError) {
