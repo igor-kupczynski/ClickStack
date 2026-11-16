@@ -1,4 +1,5 @@
 import {
+  getVariableReferenceError,
   validateDashboardFilterModes,
   validateDashboardFilterOptionUniqueness,
   validateDashboardFilterVariableNames,
@@ -8,6 +9,7 @@ import {
   isAdhocFilter,
   isPrometheusLabelFilter,
 } from '@hyperdx/common-utils/dist/filters';
+import { parseVariableReference } from '@hyperdx/common-utils/dist/referenceVariables';
 import {
   DashboardFilter,
   DashboardSchema,
@@ -103,7 +105,10 @@ async function validateFilterSources(
   );
   const newRefs = filters.flatMap(filter =>
     getFilterSourceRefs(filter).filter(
-      ref => !existingRefsById.get(filter.id)?.has(refKey(ref)),
+      ref =>
+        // Variable references are checked by validateDashboardVariableReferences
+        parseVariableReference(ref.id) == null &&
+        !existingRefsById.get(filter.id)?.has(refKey(ref)),
     ),
   );
   if (newRefs.length === 0) return null;
@@ -178,7 +183,9 @@ router.post(
       // dashboard to the provisioner.
       const dashboard = _.omit(req.body, 'provisioned');
 
-      const sourceError = await validateFilterSources(teamId, req.body.filters);
+      const sourceError =
+        getVariableReferenceError(req.body.tiles, req.body.filters) ??
+        (await validateFilterSources(teamId, req.body.filters));
       if (sourceError != null) {
         return res.status(400).json({ message: sourceError });
       }
@@ -223,11 +230,16 @@ router.patch(
       // null still signals field removal downstream.
       const updates = DashboardWithoutIdSchema.partial().parse(req.body);
 
-      const sourceError = await validateFilterSources(
-        teamId,
-        req.body.filters,
-        dashboard.filters,
-      );
+      const sourceError =
+        getVariableReferenceError(
+          req.body.tiles ?? dashboard.tiles,
+          req.body.filters ?? dashboard.filters,
+        ) ??
+        (await validateFilterSources(
+          teamId,
+          req.body.filters,
+          dashboard.filters,
+        ));
       if (sourceError != null) {
         return res.status(400).json({ message: sourceError });
       }
