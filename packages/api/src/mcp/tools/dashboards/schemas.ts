@@ -1865,7 +1865,7 @@ const mcpPromqlAdhocFilterSchema = mcpAdhocFilterSchema.extend({
         '"sql", promql sources for "promql".',
     ),
   where: mcpAdhocFilterSchema.shape.where.describe(
-    `${mcpAdhocFilterSchema.shape.where.description} sourceType "sql" only.`,
+    `${mcpAdhocFilterSchema.shape.where.description} sourceType "sql" only; rejected when sourceType is "promql".`,
   ),
 });
 
