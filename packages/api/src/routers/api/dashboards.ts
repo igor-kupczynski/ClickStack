@@ -1,4 +1,5 @@
 import {
+  getVariableReferenceError,
   validateDashboardFilterModes,
   validateDashboardFilterOptionUniqueness,
   validateDashboardFilterVariableNames,
@@ -9,6 +10,7 @@ import {
   isPrometheusLabelFilter,
   isSqlQueryFilter,
 } from '@hyperdx/common-utils/dist/filters';
+import { parseVariableReference } from '@hyperdx/common-utils/dist/referenceVariables';
 import {
   DashboardFilter,
   DashboardSchema,
@@ -105,7 +107,10 @@ async function validateFilterSources(
   );
   const newRefs = filters.flatMap(filter =>
     getFilterSourceRefs(filter).filter(
-      ref => !existingRefsById.get(filter.id)?.has(refKey(ref)),
+      ref =>
+        // Variable references are checked by validateDashboardVariableReferences
+        parseVariableReference(ref.id) == null &&
+        !existingRefsById.get(filter.id)?.has(refKey(ref)),
     ),
   );
   if (newRefs.length === 0) return null;
@@ -223,10 +228,9 @@ router.post(
       // dashboard to the provisioner.
       const dashboard = _.omit(req.body, 'provisioned');
 
-      const filterError = await validateFilterReferences(
-        teamId,
-        req.body.filters,
-      );
+      const filterError =
+        getVariableReferenceError(req.body.tiles, req.body.filters) ??
+        (await validateFilterReferences(teamId, req.body.filters));
       if (filterError != null) {
         return res.status(400).json({ message: filterError });
       }
@@ -271,11 +275,16 @@ router.patch(
       // null still signals field removal downstream.
       const updates = DashboardWithoutIdSchema.partial().parse(req.body);
 
-      const filterError = await validateFilterReferences(
-        teamId,
-        req.body.filters,
-        dashboard.filters,
-      );
+      const filterError =
+        getVariableReferenceError(
+          req.body.tiles ?? dashboard.tiles,
+          req.body.filters ?? dashboard.filters,
+        ) ??
+        (await validateFilterReferences(
+          teamId,
+          req.body.filters,
+          dashboard.filters,
+        ));
       if (filterError != null) {
         return res.status(400).json({ message: filterError });
       }
