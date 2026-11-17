@@ -1,5 +1,6 @@
 import { RegisterOptions, useForm } from 'react-hook-form';
-import { screen } from '@testing-library/react';
+import { SourceKind, TSource } from '@hyperdx/common-utils/dist/types';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import {
@@ -12,6 +13,31 @@ import { SqlVariablesProvider } from '@/components/SQLEditor/variableCompletions
 
 const mockUseSqlQueryFilterValues = jest.fn();
 const mockCompletionLabels: string[] = [];
+let mockSources: TSource[] = [];
+
+const logSource = (id: string, connection: string): TSource => ({
+  id,
+  name: id,
+  kind: SourceKind.Log,
+  connection,
+  from: { databaseName: 'default', tableName: 'otel_logs' },
+  timestampValueExpression: 'Timestamp',
+  defaultTableSelectExpression: '',
+});
+
+jest.mock('@/source', () => ({
+  ...jest.requireActual('@/source'),
+  useSources: () => ({ data: mockSources }),
+}));
+jest.mock('@/components/SourceSelect', () => ({
+  SourceSelectControlled: ({
+    control,
+    name,
+  }: {
+    control: FilterFormControl;
+    name: 'source';
+  }) => <input data-testid="source-input" {...control.register(name)} />,
+}));
 
 jest.mock('@/hooks/useSqlQueryFilterValues', () => ({
   useSqlQueryFilterValues: (...args: unknown[]) =>
@@ -69,13 +95,21 @@ const valuesResult = ({
 
 const cloudVariable = { name: 'cloud', expression: 'cloud', values: [] };
 
-function Harness() {
-  const { control, handleSubmit } = useForm<FilterFormValues>({
-    defaultValues: { ...toFormValues(), type: 'SQL_QUERY' },
+function Harness({
+  defaultValues,
+}: {
+  defaultValues?: Partial<FilterFormValues>;
+}) {
+  const { control, handleSubmit, setValue } = useForm<FilterFormValues>({
+    defaultValues: { ...toFormValues(), type: 'SQL_QUERY', ...defaultValues },
   });
   return (
     <SqlVariablesProvider variables={[cloudVariable]}>
-      <SqlQueryFilterEditForm control={control} otherFilters={[]} />
+      <SqlQueryFilterEditForm
+        control={control}
+        setValue={setValue}
+        otherFilters={[]}
+      />
       <button type="button" onClick={handleSubmit(() => {})}>
         Save
       </button>
@@ -94,6 +128,7 @@ const renderForm = async (sql = 'SELECT env FROM envs') => {
 
 describe('SqlQueryFilterEditForm', () => {
   beforeEach(() => {
+    mockSources = [];
     mockUseSqlQueryFilterValues.mockReset();
     mockUseSqlQueryFilterValues.mockReturnValue(
       valuesResult({ values: ['prod', 'dev'] }),
@@ -133,8 +168,81 @@ describe('SqlQueryFilterEditForm', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(
-      await screen.findByText(/unknown variable|cannot be used/),
+      await screen.findByText(
+        /unknown variable|cannot be used|no source is selected/,
+      ),
     ).toBeInTheDocument();
+  });
+
+  describe('with a source', () => {
+    const renderWithSource = async (sql: string) => {
+      mockSources = [logSource('logs', 'conn1'), logSource('other', 'conn2')];
+      renderWithMantine(
+        <Harness defaultValues={{ connection: 'conn1', source: 'logs' }} />,
+      );
+      const user = userEvent.setup();
+      await user.type(screen.getByTestId('sql-input'), sql);
+      return user;
+    };
+
+    it('suggests and accepts the source macros', async () => {
+      const user = await renderWithSource(
+        'SELECT ServiceName FROM $__sourceTable WHERE $__filters',
+      );
+
+      expect(mockCompletionLabels).toContain('$__sourceTable');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(
+        screen.queryByText(/no source is selected|cannot be used/),
+      ).not.toBeInTheDocument();
+    });
+
+    it('previews with the source', async () => {
+      const user = await renderWithSource(
+        'SELECT ServiceName FROM $__sourceTable',
+      );
+
+      await user.click(screen.getByTestId('filter-sql-preview-button'));
+
+      expect(mockUseSqlQueryFilterValues).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: [expect.objectContaining({ source: 'logs' })],
+        }),
+      );
+    });
+
+    it('clears the source when the connection changes to one it is not on', async () => {
+      await renderWithSource('SELECT 1');
+
+      fireEvent.change(screen.getByTestId('connection-input'), {
+        target: { value: 'conn2' },
+      });
+
+      await waitFor(() =>
+        expect(screen.getByTestId('source-input')).toHaveValue(''),
+      );
+    });
+
+    it('clears a source of a kind the filter cannot use', async () => {
+      mockSources = [
+        {
+          id: 'prom',
+          name: 'prom',
+          kind: SourceKind.Promql,
+          connection: 'conn1',
+          from: { databaseName: 'default', tableName: 'ts' },
+          timestampValueExpression: 'Timestamp',
+        },
+      ];
+      renderWithMantine(
+        <Harness defaultValues={{ connection: 'conn1', source: 'prom' }} />,
+      );
+
+      await waitFor(() =>
+        expect(screen.getByTestId('source-input')).toHaveValue(''),
+      );
+    });
   });
 
   it('shows the loader, not the last values, while a re-run fetches', async () => {

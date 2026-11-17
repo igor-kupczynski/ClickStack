@@ -1777,13 +1777,21 @@ const mcpSqlQueryFilterSchema = z
     connectionId: objectIdSchema.describe(
       'ClickHouse connection the query runs on. Get IDs from clickstack_list_sources.',
     ),
+    sourceId: objectIdSchema
+      .optional()
+      .describe(
+        'Optional log, trace, session, or metric source on the same connection. ' +
+          'Lets sqlTemplate use $__sourceTable and $__filters. Get IDs from ' +
+          'clickstack_list_sources.',
+      ),
     sqlTemplate: SqlQueryDashboardFilterSchema.shape.sqlTemplate.describe(
       'ClickHouse SELECT whose FIRST column becomes the dropdown values (cast to ' +
         'string; nulls and duplicates dropped; row order kept, so add ORDER BY). ' +
         'May use the time macros ($__timeFilter(<column>), $__fromTime, $__toTime) ' +
         "and other filters' variables, ideally as $__filter(<expression>, $<variableName>). " +
-        'Cannot use $__sourceTable or $__filters: the filter has no source, so name ' +
-        'tables explicitly. Example: "SELECT DISTINCT env FROM default.envs ORDER BY env".',
+        '$__sourceTable and $__filters need a sourceId; $__filters expands to the ' +
+        "dashboard's broadcast filter selections for that source. Without a sourceId, " +
+        'name tables explicitly. Example: "SELECT DISTINCT env FROM default.envs ORDER BY env".',
     ),
   })
   .describe(

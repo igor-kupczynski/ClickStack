@@ -26,6 +26,7 @@ import {
   QUERY_EXPRESSION_FILTER_SOURCE_KINDS,
   type SavedFilterValueIssue,
   type SavedQueryIssue,
+  SQL_QUERY_FILTER_SOURCE_KINDS,
   validateDashboardFilterQueries,
   validateSavedFilterValues,
   validateSavedQuery,
@@ -46,6 +47,7 @@ import {
   type QueryExpressionDashboardFilter,
   SavedChartConfig,
   SourceKind,
+  type SqlQueryDashboardFilter,
   TSource,
 } from '@hyperdx/common-utils/dist/types';
 import {
@@ -401,8 +403,14 @@ function resolveAppliesToSources(
 /** Whether the filter names a single source that import must map. */
 const isSourceBackedTemplateFilter = (
   filter: DashboardFilter,
-): filter is QueryExpressionDashboardFilter | PromqlLabelDashboardFilter =>
-  isQueryExpressionFilter(filter) || isPrometheusLabelFilter(filter);
+): filter is
+  | QueryExpressionDashboardFilter
+  | PromqlLabelDashboardFilter
+  | SqlQueryDashboardFilter =>
+  isQueryExpressionFilter(filter) ||
+  isPrometheusLabelFilter(filter) ||
+  // The source is optional for a SQL query filter
+  (isSqlQueryFilter(filter) && !!filter.source);
 
 /** Returns the filter if it names a source, or `undefined` if it doesn't. */
 const sourceBackedTemplateFilter = (filter: DashboardFilter | undefined) =>
@@ -436,7 +444,9 @@ const filterSourceKinds = (
     ? [SourceKind.Promql]
     : isQueryExpressionFilter(filter)
       ? QUERY_EXPRESSION_FILTER_SOURCE_KINDS
-      : undefined;
+      : isSqlQueryFilter(filter)
+        ? SQL_QUERY_FILTER_SOURCE_KINDS
+        : undefined;
 
 /**
  * One mapping select's value. Mantine's Select writes `null` when the user
@@ -564,7 +574,6 @@ export function buildMappingFormSchema(
               message: 'Select a connection for this filter',
             });
           }
-          return;
         }
 
         if (!isSourceBackedTemplateFilter(filter)) return;
@@ -1134,7 +1143,14 @@ export function Mapping({ input }: { input: DashboardTemplate }) {
           const connection = findConnection(
             data.filterConnectionMappings?.[idx],
           );
-          return { ...filter, connection: connection!.id };
+          const source = filter.source
+            ? findSource(data.filterSourceMappings?.[idx])
+            : undefined;
+          return {
+            ...filter,
+            connection: connection!.id,
+            source: source?.id,
+          };
         }
         const source = findSource(data.filterSourceMappings?.[idx]);
         return {

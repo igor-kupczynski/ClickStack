@@ -2712,13 +2712,21 @@ const EXTERNAL_DASHBOARD_PROJECTION = {
  *           type: string
  *           description: ID of the ClickHouse connection the query runs on.
  *           example: "65f5e4a3b9e77c001a567890"
+ *         sourceId:
+ *           type: string
+ *           description: |
+ *             Optional Log, Trace, Session, or Metric source on the same
+ *             connection. Lets `sqlTemplate` use `$__sourceTable` and
+ *             `$__filters`.
+ *           example: "65f5e4a3b9e77c001a345678"
  *         sqlTemplate:
  *           type: string
  *           minLength: 1
  *           description: |
  *             Query whose first column populates the dropdown. May use the time
- *             macros and other filters' variables, but not `$__sourceTable` or
- *             `$__filters`, since the filter has no source.
+ *             macros and other filters' variables. `$__sourceTable` and
+ *             `$__filters` need a `sourceId`; `$__filters` expands to the
+ *             dashboard's broadcast filter selections for that source.
  *           example: "SELECT DISTINCT env FROM default.envs ORDER BY env"
  *         isBroadcastEnabled:
  *           type: boolean

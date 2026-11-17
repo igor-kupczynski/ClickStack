@@ -324,9 +324,9 @@ describe('toSavedFilter', () => {
         name: 'Region',
         connection: 'conn1',
         sqlTemplate: '  SELECT region FROM regions  ',
+        source: 'logs',
         // Left behind by the other editors before the type was switched.
         expression: 'Env',
-        source: 'logs',
         where: 'x = 1',
         options: ['prod'],
       }),
@@ -337,6 +337,7 @@ describe('toSavedFilter', () => {
       type: 'SQL_QUERY',
       name: 'Region',
       connection: 'conn1',
+      source: 'logs',
       sqlTemplate: 'SELECT region FROM regions',
       isBroadcastEnabled: false,
       isVariableEnabled: true,
@@ -344,8 +345,24 @@ describe('toSavedFilter', () => {
     });
     expect(toFormValues(saved)).toMatchObject({
       connection: 'conn1',
+      source: 'logs',
       sqlTemplate: 'SELECT region FROM regions',
     });
+  });
+
+  it('saves a SQL query filter without a source when none is picked', () => {
+    const saved = toSavedFilter(
+      formValues({
+        type: 'SQL_QUERY',
+        name: 'Region',
+        connection: 'conn1',
+        source: '',
+        sqlTemplate: 'SELECT region FROM regions',
+      }),
+    );
+
+    // The schema requires a non-empty source when one is set.
+    expect(saved).toMatchObject({ source: undefined });
   });
 
   it('rejects a SQL query filter without a connection', () => {

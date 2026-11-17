@@ -952,14 +952,19 @@ export function convertToDashboardTemplate(
     // A static filter references nothing in the workspace
     if (isStaticListFilter(filter)) return filter;
 
+    const getSourceName = (id: string) =>
+      sources.find(source => source.id === id)?.name ?? '';
+
     if (isSqlQueryFilter(filter)) {
       filter.connection =
         connections.find(conn => conn.id === filter.connection)?.name ?? '';
+      // The source is optional, so drop it rather than export an empty name
+      // the template schema would reject.
+      if (filter.source) {
+        filter.source = getSourceName(filter.source) || undefined;
+      }
       return filter;
     }
-
-    const getSourceName = (id: string) =>
-      sources.find(source => source.id === id)?.name ?? '';
 
     if (isAdhocFilter(filter)) {
       filter.sources = filter.sources.map(getSourceName);

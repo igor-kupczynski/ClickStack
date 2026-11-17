@@ -82,7 +82,12 @@ export const toFormValues = (
 
     // QUERY_EXPRESSION fields
     expression: queried?.expression ?? '',
-    source: queried?.source ?? promqlLabel?.source ?? presetSourceId ?? '',
+    source:
+      queried?.source ??
+      promqlLabel?.source ??
+      sqlQuery?.source ??
+      presetSourceId ??
+      '',
     sourceMetricType: queried?.sourceMetricType,
     where: queried?.where ?? adhoc?.where ?? '',
     whereLanguage:
@@ -150,6 +155,7 @@ export const toSavedFilter = (values: FilterFormValues): DashboardFilter => {
   if (values.type === 'SQL_QUERY') {
     return DashboardFilterSchema.parse({
       ...rest,
+      source: values.source || undefined,
       sqlTemplate: values.sqlTemplate.trim(),
       isBroadcastEnabled: false,
       isVariableEnabled: true,

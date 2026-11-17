@@ -14,6 +14,7 @@ import {
 } from '@hyperdx/common-utils/dist/filters';
 import {
   AdhocFilterCondition,
+  BroadcastFilter,
   ChartVariable,
   DashboardFilter,
 } from '@hyperdx/common-utils/dist/types';
@@ -175,6 +176,8 @@ interface DashboardFilterProps {
   variables?: ChartVariable[];
   /** Required filters with nothing selected, which can block ad hoc filters. */
   unsatisfiedRequiredFilters?: DashboardFilter[];
+  /** The filter selections that broadcast to a source, for `$__filters` */
+  getDashboardFilters?: (sourceId: string) => BroadcastFilter[];
 }
 
 const DashboardFilters = ({
@@ -186,6 +189,7 @@ const DashboardFilters = ({
   onSetAdhocConditions,
   variables,
   unsatisfiedRequiredFilters,
+  getDashboardFilters,
 }: DashboardFilterProps) => {
   // "Link" mode (opt-in, off by default): each dropdown's values are narrowed by
   // the others' selections. Off by default because contingent value lookups
@@ -202,6 +206,7 @@ const DashboardFilters = ({
     filters,
     dateRange,
     variables,
+    getDashboardFilters,
     // Only narrow by sibling selections when linked.
     selectionByFilterId: linked ? selectionByFilterId : EMPTY_SELECTIONS,
   });

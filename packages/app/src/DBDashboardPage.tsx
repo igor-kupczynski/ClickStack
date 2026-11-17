@@ -3332,6 +3332,7 @@ function DBDashboardPage({
           dateRange={searchedTimeRange}
           variables={variables}
           unsatisfiedRequiredFilters={unsatisfiedRequiredFilters}
+          getDashboardFilters={getFilterQueriesForSource}
         />
       )}
       {/* Selection indicator */}
@@ -3511,6 +3512,7 @@ function DBDashboardPage({
           showRequiredFilterOptions
           variables={variables}
           dateRange={searchedTimeRange}
+          getDashboardFilters={getFilterQueriesForSource}
         />
       )}
     </>

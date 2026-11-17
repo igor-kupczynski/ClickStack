@@ -8,6 +8,7 @@ import {
   isAdhocFilter,
   isPrometheusLabelFilter,
   isSqlQueryFilter,
+  SQL_QUERY_FILTER_SOURCE_KINDS,
 } from '@hyperdx/common-utils/dist/filters';
 import {
   DashboardFilter,
@@ -79,13 +80,16 @@ function getFilterSourceRefs(
       id => ({ id, kinds }),
     );
   }
+  if (isSqlQueryFilter(filter) && filter.source) {
+    return [{ id: filter.source, kinds: SQL_QUERY_FILTER_SOURCE_KINDS }];
+  }
   return [];
 }
 
 /**
- * Rejects PROMETHEUS_LABEL and ADHOC filters that reference a source that is
- * missing or of the wrong kind. Resolving these filters needs a live source of
- * the right kind, unlike other filter types. References the stored filter with
+ * Rejects PROMETHEUS_LABEL, ADHOC and SQL_QUERY filters that reference a source
+ * that is missing or of the wrong kind. Resolving these filters needs a live
+ * source of the right kind, unlike other filter types. References the stored filter with
  * the same ID already made are skipped, so a since-deleted source doesn't block
  * unrelated saves. Returns an error message, or null when there is nothing to
  * reject.

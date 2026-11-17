@@ -1,9 +1,18 @@
 import { useMemo } from 'react';
 import { ResponseJSON } from '@hyperdx/common-utils/dist/clickhouse';
-import { renderSqlQueryFilterValuesQuery } from '@hyperdx/common-utils/dist/filters';
+import { renderSourceFiltersToSql } from '@hyperdx/common-utils/dist/core/renderChartConfig';
 import {
+  getSqlFilters,
+  getSqlQueryFilterSourceTables,
+  renderSqlQueryFilterValuesQuery,
+} from '@hyperdx/common-utils/dist/filters';
+import { hasMacro } from '@hyperdx/common-utils/dist/macros';
+import {
+  BroadcastFilter,
   ChartVariable,
+  Filter,
   SqlQueryDashboardFilter,
+  TSource,
 } from '@hyperdx/common-utils/dist/types';
 import {
   keepPreviousData,
@@ -13,6 +22,10 @@ import {
 
 import { getClickhouseClient } from '@/clickhouse';
 import { useMetadataQueryAttribution } from '@/queryAttribution';
+import { useSources } from '@/source';
+import { mapKeyBy } from '@/utils';
+
+import { useMetadataWithSettings } from './useMetadata';
 
 /** Seconds a filter's values query may run before ClickHouse stops it. */
 const MAX_EXECUTION_SECONDS = 30;
@@ -20,8 +33,12 @@ const MAX_EXECUTION_SECONDS = 30;
 type ValuesCall = {
   filterId: string;
   connection: string;
+  sqlTemplate: string;
   sql: string;
   params: Record<string, number>;
+  source?: TSource;
+  /** The broadcast conditions `$__filters` expands to, when the SQL uses it. */
+  broadcastFilters: Filter[];
 };
 
 /** Rows from the values query, without nulls or repeats, in query order. */
@@ -36,34 +53,67 @@ export function useSqlQueryFilterValues({
   filters,
   dateRange,
   variables,
+  getDashboardFilters,
 }: {
   filters: SqlQueryDashboardFilter[];
   dateRange: [Date, Date];
   /** The dashboard's variables and their current selections, if any */
   variables?: ChartVariable[];
+  /** The dashboard filter selections that broadcast to the given source */
+  getDashboardFilters?: (sourceId: string) => BroadcastFilter[];
 }) {
+  const { data: sources, isLoading: isLoadingSources } = useSources();
+  const sourcesById = useMemo(() => mapKeyBy(sources ?? [], 'id'), [sources]);
+  const metadata = useMetadataWithSettings();
+
   // Expanded here so react-query keys on the SQL that actually runs, which
-  // changes with other filters' selections.
+  // changes with other filters' selections. `$__filters` is expanded in the
+  // query function instead, since that needs the source's metadata.
   const { calls, templateErrors } = useMemo(() => {
     const resolved: ValuesCall[] = [];
     const errors = new Map<string, string>();
     for (const filter of filters) {
+      const source = filter.source ? sourcesById.get(filter.source) : undefined;
+      if (filter.source && !source) {
+        // Every source looks missing until the list arrives.
+        if (!isLoadingSources) {
+          errors.set(filter.id, `Source ${filter.source} not found`);
+        }
+        continue;
+      }
       try {
+        const rendered = renderSqlQueryFilterValuesQuery({
+          sqlTemplate: filter.sqlTemplate,
+          variables,
+          dateRange,
+          sourceTables: source
+            ? getSqlQueryFilterSourceTables(source)
+            : undefined,
+        });
         resolved.push({
           filterId: filter.id,
           connection: filter.connection,
-          ...renderSqlQueryFilterValuesQuery({
-            sqlTemplate: filter.sqlTemplate,
-            variables,
-            dateRange,
-          }),
+          sqlTemplate: filter.sqlTemplate,
+          ...rendered,
+          source,
+          broadcastFilters:
+            source && hasMacro(filter.sqlTemplate, 'filters')
+              ? getSqlFilters(getDashboardFilters?.(source.id) ?? [])
+              : [],
         });
       } catch (e) {
         errors.set(filter.id, e instanceof Error ? e.message : String(e));
       }
     }
     return { calls: resolved, templateErrors: errors };
-  }, [filters, variables, dateRange]);
+  }, [
+    filters,
+    variables,
+    dateRange,
+    sourcesById,
+    isLoadingSources,
+    getDashboardFilters,
+  ]);
 
   const attribution = useMetadataQueryAttribution();
 
@@ -74,15 +124,32 @@ export function useSqlQueryFilterValues({
         call.connection,
         call.sql,
         call.params,
+        call.source?.id,
+        call.broadcastFilters,
       ],
       // Keep the last values while a new range or selection loads, rather than
       // blanking the dropdown.
       placeholderData: keepPreviousData,
       staleTime: 1000 * 60 * 5,
       queryFn: async ({ signal }) => {
+        let { sql } = call;
+        if (call.source && call.broadcastFilters.length > 0) {
+          const filtersSQL = await renderSourceFiltersToSql({
+            source: call.source,
+            filters: call.broadcastFilters,
+            metadata,
+          });
+          sql = renderSqlQueryFilterValuesQuery({
+            sqlTemplate: call.sqlTemplate,
+            variables,
+            dateRange,
+            sourceTables: getSqlQueryFilterSourceTables(call.source),
+            filtersSQL,
+          }).sql;
+        }
         const result = (await getClickhouseClient({ attribution })
           .query<'JSON'>({
-            query: call.sql,
+            query: sql,
             query_params: call.params,
             format: 'JSON',
             abort_signal: signal,
@@ -123,13 +190,22 @@ export function useSqlQueryFilterValues({
       filterErrorMessages.set(filterId, message);
     }
 
+    // A filter waiting on its source has no call yet, but is still loading.
+    const isWaitingForSources =
+      isLoadingSources && filters.some(filter => filter.source);
+    for (const filter of filters) {
+      if (isWaitingForSources && !data.has(filter.id)) {
+        data.set(filter.id, { values: [], isLoading: true });
+      }
+    }
+
     return {
       data,
       erroredFilterIds,
       filterErrorMessages,
-      isLoading: results.some(r => r.isLoading),
-      isFetching: results.some(r => r.isFetching),
+      isLoading: isWaitingForSources || results.some(r => r.isLoading),
+      isFetching: isWaitingForSources || results.some(r => r.isFetching),
       isError: erroredFilterIds.size > 0,
     };
-  }, [results, calls, templateErrors]);
+  }, [results, calls, templateErrors, filters, isLoadingSources]);
 }

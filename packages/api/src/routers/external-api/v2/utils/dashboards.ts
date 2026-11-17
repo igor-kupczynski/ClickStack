@@ -13,7 +13,10 @@ import {
   validateDashboardFilterVariableNames,
   validateDashboardTileContainerRefs,
 } from '@hyperdx/common-utils/dist/dashboardValidation';
-import { isPrometheusLabelFilter } from '@hyperdx/common-utils/dist/filters';
+import {
+  isPrometheusLabelFilter,
+  SQL_QUERY_FILTER_SOURCE_KINDS,
+} from '@hyperdx/common-utils/dist/filters';
 import {
   isBuilderSavedChartConfig,
   isHeatmapCompatibleSource,
@@ -1306,7 +1309,7 @@ function getMissingSources(
 
   if (filters?.length) {
     for (const filter of filters) {
-      if ('sourceId' in filter) {
+      if ('sourceId' in filter && filter.sourceId) {
         sourceIds.add(filter.sourceId);
       }
     }
@@ -1348,6 +1351,28 @@ function getHeatmapTilesWithIncompatibleSources(
     }
   }
   return { distribution: [...distribution], series: [...series] };
+}
+
+/**
+ * Returns an error message if a SQL_QUERY filter's source is a kind its
+ * $__sourceTable macro can't expand (PromQL), or null.
+ */
+function getSqlQueryFilterSourceKindError(
+  sources: SourceForValidation[],
+  filters: (ExternalDashboardFilter | ExternalDashboardFilterWithId)[],
+): string | null {
+  const kindById = new Map(sources.map(s => [s._id.toString(), s.kind]));
+  const invalid = new Set(
+    filters.flatMap(filter => {
+      if (filter.type !== 'SQL_QUERY' || !filter.sourceId) return [];
+      const kind = kindById.get(filter.sourceId);
+      return kind === undefined || SQL_QUERY_FILTER_SOURCE_KINDS.includes(kind)
+        ? []
+        : [filter.sourceId];
+    }),
+  );
+  if (invalid.size === 0) return null;
+  return `SQL_QUERY filters require a Log, Trace, Session, or Metric source. The following source IDs are not: ${[...invalid].join(', ')}`;
 }
 
 /**
@@ -1704,24 +1729,38 @@ export function convertExternalFiltersToInternal(
 function getSourceConnectionMismatches(
   sources: SourceForValidation[],
   tiles: ExternalDashboardTileWithId[],
+  filters: (ExternalDashboardFilter | ExternalDashboardFilterWithId)[] = [],
 ): string[] {
   const sourceById = new Map(sources.map(s => [s._id.toString(), s]));
 
-  const mismatched: string[] = [];
+  const refs: { sourceId: string; connectionId: string }[] = [];
   for (const tile of tiles) {
     if (
       isConfigTile(tile) &&
       isRawSqlExternalTileConfig(tile.config) &&
       tile.config.sourceId
     ) {
-      const source = sourceById.get(tile.config.sourceId);
-      if (source && source.connection.toString() !== tile.config.connectionId) {
-        mismatched.push(tile.config.sourceId);
-      }
+      refs.push({
+        sourceId: tile.config.sourceId,
+        connectionId: tile.config.connectionId,
+      });
+    }
+  }
+  for (const filter of filters) {
+    if (filter.type === 'SQL_QUERY' && filter.sourceId) {
+      refs.push({
+        sourceId: filter.sourceId,
+        connectionId: filter.connectionId,
+      });
     }
   }
 
-  return mismatched;
+  return refs
+    .filter(({ sourceId, connectionId }) => {
+      const source = sourceById.get(sourceId);
+      return source && source.connection.toString() !== connectionId;
+    })
+    .map(({ sourceId }) => sourceId);
 }
 
 // ── Shared tile validation ───────────────────────────────────────────────
@@ -1781,6 +1820,7 @@ export async function validateDashboardTiles(
   const sourceConnectionMismatches = getSourceConnectionMismatches(
     sources,
     tiles,
+    filters,
   );
   if (sourceConnectionMismatches.length > 0) {
     return `The following source IDs do not match the specified connections: ${sourceConnectionMismatches.join(', ')}`;
@@ -1833,6 +1873,12 @@ export async function validateDashboardTiles(
     'PROMETHEUS_LABEL filters',
   );
   if (promqlLabelFilterError != null) return promqlLabelFilterError;
+
+  const sqlQueryFilterError = getSqlQueryFilterSourceKindError(
+    sources,
+    filters ?? [],
+  );
+  if (sqlQueryFilterError != null) return sqlQueryFilterError;
 
   if (missingOnClickDashboards.length > 0) {
     return `Could not find the following onClick dashboard IDs: ${missingOnClickDashboards.join(', ')}`;

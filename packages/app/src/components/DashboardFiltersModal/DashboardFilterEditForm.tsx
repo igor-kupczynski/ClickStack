@@ -5,6 +5,7 @@ import {
   getFilterVariableName,
 } from '@hyperdx/common-utils/dist/filters';
 import {
+  BroadcastFilter,
   ChartVariable,
   DashboardFilter,
   DashboardFilterType,
@@ -83,6 +84,8 @@ interface DashboardFilterEditFormProps {
   variables?: ChartVariable[];
   /** The dashboard's date range, which filter previews run over */
   dateRange?: [Date, Date];
+  /** The dashboard filter selections that broadcast to the given source */
+  getDashboardFilters?: (sourceId: string) => BroadcastFilter[];
   onSave: (filter: DashboardFilter) => void;
   onClose: () => void;
   onCancel: () => void;
@@ -102,6 +105,7 @@ export const DashboardFilterEditForm = ({
   showRequiredFilterOptions,
   variables,
   dateRange,
+  getDashboardFilters,
   onSave,
   onClose,
   onCancel,
@@ -258,8 +262,10 @@ export const DashboardFilterEditForm = ({
               <SqlVariablesProvider variables={otherVariables}>
                 <SqlQueryFilterEditForm
                   control={control}
+                  setValue={setValue}
                   otherFilters={otherFilters}
                   dateRange={dateRange}
+                  getDashboardFilters={getDashboardFilters}
                 />
               </SqlVariablesProvider>
             ) : formFilterType === 'PROMETHEUS_LABEL' ? (
