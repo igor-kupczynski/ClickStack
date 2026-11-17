@@ -157,7 +157,7 @@ import PatternTable from './components/PatternTable';
 import { DBSearchHeatmapChart } from './components/Search/DBSearchHeatmapChart';
 import DirectTraceSidePanel from './components/Search/DirectTraceSidePanel';
 import {
-  type TraceChartMode,
+  TRACE_CHART_MODES,
   TraceRedMetricsChart,
 } from './components/Search/TraceRedMetricsChart';
 import { useTraceChartModeGuards } from './components/Search/useTraceChartModeGuards';
@@ -1128,7 +1128,7 @@ function DBSearchPageContent() {
   // chosen view; the switch lives inline in the search stats row.
   const [traceChartMode, setTraceChartMode] = useQueryState(
     'traceChartMode',
-    parseAsStringEnum<TraceChartMode>(['red', 'heatmap']).withDefault('red'),
+    parseAsStringEnum([...TRACE_CHART_MODES]).withDefault('red'),
   );
 
   // URL-only, not saved with the search: null uses the source default.
@@ -2944,7 +2944,9 @@ function DBSearchPageContent() {
                                   value={traceChartMode}
                                   onChange={v =>
                                     setTraceChartMode(
-                                      v === 'heatmap' ? 'heatmap' : 'red',
+                                      TRACE_CHART_MODES.find(
+                                        mode => mode === v,
+                                      ) ?? 'red',
                                     )
                                   }
                                   data={[
