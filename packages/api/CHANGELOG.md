@@ -1,5 +1,30 @@
 # @hyperdx/api
 
+## 2.46.0
+
+### Minor Changes
+
+- 743c3c1a6: feat: add an optional "Row key expression" to log and trace sources. When set,
+  the side panel's row lookup selects and filters on only those columns instead of
+  detecting keys from table metadata.
+
+### Patch Changes
+
+- 8952972c9: perf: check-alerts gives each alert only its own previous history, so a tick
+  no longer scans every alert's group history once per alert
+- f42c68a9c: chore: bump `uuid` to 11.1.1 (fixes GHSA-w5hq-g745-h8pq) and drop `@types/uuid`
+- fa3a5649e: feat: accept SQL query dashboard filters in the API, external API, and MCP
+
+  Saving a dashboard now rejects a `SQL_QUERY` filter whose connection doesn't belong to the team. The external API and MCP read and write the filter with a `connectionId`, and MCP warns about unknown variables and source-only macros in its SQL.
+
+- 5b50c31c9: feat: add the SQL query dashboard filter type to the dashboard schema
+
+  A `SQL_QUERY` filter stores a ClickHouse connection and a SQL template whose first column fills the filter's dropdown. It is variable-only. Validation flags templates that use `$__sourceTable` or `$__filters`, or whose macros and variable references can't expand. The filter is not yet exposed through the external API or MCP, and has no editor or values lookup yet.
+
+- Updated dependencies [743c3c1a6]
+- Updated dependencies [5b50c31c9]
+  - @hyperdx/common-utils@0.36.0
+
 ## 2.45.0
 
 ### Minor Changes
