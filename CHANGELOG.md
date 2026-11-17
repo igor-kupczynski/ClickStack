@@ -6,6 +6,71 @@ PR — keep the `hyperdx-release-notes` comment marker intact when editing so yo
 edits survive regeneration. Per-package detail lives in each
 `packages/*/CHANGELOG.md`.
 
+## v2.46.0 — 2026-11-17
+
+<!-- hyperdx-release-notes version=2.46.0 inputs=c6e3c45977ff -->
+
+**Row key expressions and named MCP installs**
+
+Log and trace sources can now carry an optional "Row key expression", so the
+side panel looks a row up using exactly the columns you nominate instead of
+guessing keys from table metadata — useful when your table's primary key is not
+what the metadata suggests. The CLI's `hdx mcp install` also learned
+`--name <server-name>`, so a second ClickStack instance can sit alongside the
+first rather than overwriting it. Dashboards gain a new SQL query filter type as
+well, whose dropdown values come from a SQL template you write — available
+through the API and MCP in this release, with the in-app editor still to come.
+
+### ✨ New Features
+
+- **Row key expression on log and trace sources**: set an optional row key
+  expression on a source and the side panel's row lookup selects and filters on
+  only those columns, instead of detecting keys from table metadata. Leave it
+  empty and nothing changes — detection behaves exactly as it does today.
+- **Keep several ClickStack MCP servers side by side**: `hdx mcp install
+  --name <server-name>` adds the MCP server under a name you choose, so
+  installing a second ClickStack instance no longer overwrites the first. When
+  your key belongs to more than one team, the installer asks which teams to add
+  a server for and adds one entry per team, and when it finds more than one
+  agent it asks which to set up.
+- **SQL query dashboard filters**: a dashboard filter can now be defined as a
+  ClickHouse connection plus a SQL template, with the first column of the
+  result filling the filter's dropdown. The filter is variable-only, and a
+  template that uses `$__sourceTable` or `$__filters`, or whose macros and
+  variable references can't expand, is rejected when you save the dashboard —
+  as is a filter pointing at a connection that doesn't belong to your team. You
+  can read and write it through the API, external API and MCP today, where MCP
+  also warns about unknown variables and source-only macros in the SQL; there
+  is no in-app editor or values lookup yet.
+
+### 🔧 Improvements
+
+- **Alert checks scale better with the number of alerts**: each alert is now
+  evaluated against only its own previous history, so a single check-alerts tick
+  no longer re-scans every alert's group history once per alert. Deployments
+  with many alerts should see noticeably lighter alert-checking work each tick.
+- **Dashboard tile alerts can check every minute**: the 1 minute interval is no
+  longer limited to development, so an alert on a dashboard tile can run at the
+  shortest interval in your own deployment.
+
+### 📦 Build / Packaging
+
+- **`uuid` updated to 11.1.1 in the API**: the API now depends on `uuid` 11.1.1,
+  which carries the fix for GHSA-w5hq-g745-h8pq. No action is needed beyond
+  upgrading.
+
+<!-- hyperdx-package-list -->
+
+### 📦 Package changelogs
+
+- `@hyperdx/api` 2.45.0 → 2.46.0 — [changelog](https://github.com/ClickHouse/ClickStack/blob/main/packages/api/CHANGELOG.md#2460)
+- `@hyperdx/app` 2.45.0 → 2.46.0 — [changelog](https://github.com/ClickHouse/ClickStack/blob/main/packages/app/CHANGELOG.md#2460)
+- `@hyperdx/cli` 0.9.0 → 0.9.1 — [changelog](https://github.com/ClickHouse/ClickStack/blob/main/packages/cli/CHANGELOG.md#091)
+- `@hyperdx/common-utils` 0.35.0 → 0.36.0 — [changelog](https://github.com/ClickHouse/ClickStack/blob/main/packages/common-utils/CHANGELOG.md#0360)
+- `@hyperdx/otel-collector` 2.45.0 → 2.46.0 — [changelog](https://github.com/ClickHouse/ClickStack/blob/main/packages/otel-collector/CHANGELOG.md#2460)
+
+<!-- /hyperdx-package-list -->
+
 ## v2.45.0 — 2026-11-13
 
 <!-- hyperdx-release-notes version=2.45.0 inputs=8861d0a1698f -->
