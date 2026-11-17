@@ -67,10 +67,15 @@ const addFilterIssues = (
   validateDashboardFilterOptionUniqueness(data.filters ?? [], ctx);
 };
 
+type FilterSourceRef = {
+  id: string;
+  kinds: SourceKind[];
+  /** The connection the source must be on, when the filter has its own. */
+  connection?: string;
+};
+
 /** The sources a filter reads from, each with the kinds it must be. */
-function getFilterSourceRefs(
-  filter: DashboardFilter,
-): { id: string; kinds: SourceKind[] }[] {
+function getFilterSourceRefs(filter: DashboardFilter): FilterSourceRef[] {
   if (isPrometheusLabelFilter(filter)) {
     return [{ id: filter.source, kinds: [SourceKind.Promql] }];
   }
@@ -81,15 +86,22 @@ function getFilterSourceRefs(
     );
   }
   if (isSqlQueryFilter(filter) && filter.source) {
-    return [{ id: filter.source, kinds: SQL_QUERY_FILTER_SOURCE_KINDS }];
+    return [
+      {
+        id: filter.source,
+        kinds: SQL_QUERY_FILTER_SOURCE_KINDS,
+        connection: filter.connection,
+      },
+    ];
   }
   return [];
 }
 
 /**
  * Rejects PROMETHEUS_LABEL, ADHOC and SQL_QUERY filters that reference a source
- * that is missing or of the wrong kind. Resolving these filters needs a live
- * source of the right kind, unlike other filter types. References the stored filter with
+ * that is missing or of the wrong kind, and SQL_QUERY filters whose source is
+ * on another connection. Resolving these filters needs a live source of the
+ * right kind, unlike other filter types. References the stored filter with
  * the same ID already made are skipped, so a since-deleted source doesn't block
  * unrelated saves. Returns an error message, or null when there is nothing to
  * reject.
@@ -99,8 +111,8 @@ async function validateFilterSources(
   filters: DashboardFilter[] = [],
   existingFilters: DashboardFilter[] = [],
 ): Promise<string | null> {
-  const refKey = ({ id, kinds }: { id: string; kinds: SourceKind[] }) =>
-    `${id}:${kinds.join(',')}`;
+  const refKey = ({ id, kinds, connection }: FilterSourceRef) =>
+    `${id}:${kinds.join(',')}:${connection ?? ''}`;
   const existingRefsById = new Map(
     existingFilters.map(filter => [
       filter.id,
@@ -115,17 +127,31 @@ async function validateFilterSources(
   if (newRefs.length === 0) return null;
 
   const sources = await getSources(teamId.toString());
-  const kindById = new Map(sources.map(s => [s._id.toString(), s.kind]));
+  const sourceById = new Map(sources.map(s => [s._id.toString(), s]));
   const invalid = new Set(
     newRefs
       .filter(({ id, kinds }) => {
-        const kind = kindById.get(id);
+        const kind = sourceById.get(id)?.kind;
         return kind === undefined || !kinds.includes(kind);
       })
       .map(({ id }) => id),
   );
-  if (invalid.size === 0) return null;
-  return `The following filter source IDs do not exist or are not a kind of source the filter supports: ${[...invalid].join(', ')}`;
+  if (invalid.size > 0) {
+    return `The following filter source IDs do not exist or are not a kind of source the filter supports: ${[...invalid].join(', ')}`;
+  }
+
+  // The query runs on the filter's connection, so its source must be there too.
+  const mismatched = new Set(
+    newRefs
+      .filter(
+        ({ id, connection }) =>
+          connection !== undefined &&
+          sourceById.get(id)?.connection.toString() !== connection,
+      )
+      .map(({ id }) => id),
+  );
+  if (mismatched.size === 0) return null;
+  return `The following filter source IDs are not on the filter's connection: ${[...mismatched].join(', ')}`;
 }
 
 /**

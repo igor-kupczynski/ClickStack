@@ -2020,6 +2020,31 @@ describe('dashboard router', () => {
         .expect(400);
     });
 
+    it('rejects a source on another connection', async () => {
+      const source = await createSqlFilterSource(SourceKind.Log);
+      const otherConnection = await Connection.create({
+        team: team._id,
+        name: 'Other Connection',
+        host: 'http://localhost:8123',
+        username: 'default',
+      });
+
+      const response = await agent
+        .post('/dashboards')
+        .send({
+          ...MOCK_DASHBOARD,
+          filters: [
+            makeSqlFilter({
+              source: source._id.toString(),
+              connection: otherConnection._id.toString(),
+            }),
+          ],
+        })
+        .expect(400);
+
+      expect(response.body.message).toContain("not on the filter's connection");
+    });
+
     it('rejects a PromQL source', async () => {
       const source = await createSqlFilterSource(SourceKind.Promql);
 
