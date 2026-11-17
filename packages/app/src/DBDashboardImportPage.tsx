@@ -464,7 +464,7 @@ const MappingValueSchema = z
  */
 export function buildMappingFormSchema(
   input: DashboardTemplate,
-  sources?: readonly Pick<TSource, 'id' | 'kind'>[],
+  sources?: readonly Pick<TSource, 'id' | 'kind' | 'connection'>[],
 ) {
   return z
     .object({
@@ -600,6 +600,22 @@ export function buildMappingFormSchema(
             message: isPrometheusLabelFilter(filter)
               ? 'Select a PromQL source for this filter'
               : 'Select a non-PromQL source for this filter',
+          });
+          return;
+        }
+
+        // The filter's query runs on its connection, so its source must be there too.
+        const mappedConnectionId = data.filterConnectionMappings?.[idx];
+        if (
+          isSqlQueryFilter(filter) &&
+          mappedSource &&
+          mappedConnectionId &&
+          mappedSource.connection !== mappedConnectionId
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['filterSourceMappings', idx],
+            message: "Select a source on this filter's connection",
           });
         }
       });
@@ -1326,6 +1342,10 @@ export function Mapping({ input }: { input: DashboardTemplate }) {
 
             {/** Map filter sources */}
             {input.filters?.map((filter, i) => {
+              // A SQL query filter's source must be on its mapped connection.
+              const sourceConnectionId = isSqlQueryFilter(filter)
+                ? filterConnectionMappings?.[i]
+                : undefined;
               const appliesToSourceIds =
                 appliesToTemplateFilter(filter)?.appliesToSourceIds;
               return (
@@ -1340,8 +1360,13 @@ export function Mapping({ input }: { input: DashboardTemplate }) {
                           control={control}
                           name={`filterSourceMappings.${i}`}
                           data={sources
-                            ?.filter(source =>
-                              filterSourceKinds(filter)?.includes(source.kind),
+                            ?.filter(
+                              source =>
+                                filterSourceKinds(filter)?.includes(
+                                  source.kind,
+                                ) &&
+                                (!sourceConnectionId ||
+                                  source.connection === sourceConnectionId),
                             )
                             .map(source => ({
                               value: source.id,
